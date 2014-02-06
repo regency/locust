@@ -34,7 +34,7 @@ def task(weight=1):
     """
     
     def decorator_func(func):
-        func.locust_task_name_weight = weight
+        func.locust_task_weight = weight
         return func
     
     """
@@ -159,8 +159,8 @@ class TaskSetMeta(type):
                     new_tasks.append(task)
         
         for item in classDict.itervalues():
-            if hasattr(item, "locust_task_name_weight"):
-                for i in xrange(0, item.locust_task_name_weight):
+            if hasattr(item, "locust_task_weight"):
+                for i in xrange(0, item.locust_task_weight):
                     new_tasks.append(item)
         
         classDict["tasks"] = new_tasks
