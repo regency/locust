@@ -109,7 +109,11 @@ a {
     margin-top: 20px;
     font-size: 16px;
 }
-.start input.val, .edit input.val {
+.start input.val,
+.edit input.val,
+.start select.val,
+.edit select.val
+{
     border: none;
     background: #fff;
     height: 52px;

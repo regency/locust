@@ -57,7 +57,7 @@ class LocustRunner(object):
     def user_count(self):
         return len(self.locusts)
 
-    def weight_locusts(self, amount, stop_timeout = None):
+    def weight_locusts(self, amount, stop_timeout=None):
         """
         Distributes the amount of locusts for each WebLocust-class according to it's weight
         returns a list "bucket" with the weighted locusts
@@ -80,7 +80,8 @@ class LocustRunner(object):
             bucket.extend([locust for x in xrange(0, num_locusts)])
         return bucket
 
-    def spawn_locusts(self, spawn_count=None, stop_timeout=None, wait=False):
+    def spawn_locusts(self, spawn_count=None, stop_timeout=None, wait=False, locust_task_name=None):
+        self.locust_task_name = locust_task_name
         if spawn_count is None:
             spawn_count = self.num_clients
 
@@ -110,7 +111,7 @@ class LocustRunner(object):
                 occurence_count[locust.__name__] += 1
                 def start_locust(_):
                     try:
-                        locust().run()
+                        locust().run(locust_task_name=locust_task_name)
                     except GreenletExit:
                         pass
                 new_locust = self.locusts.spawn(start_locust, locust)
@@ -142,7 +143,8 @@ class LocustRunner(object):
             self.locusts.killone(g)
         events.hatch_complete.fire(user_count=self.num_clients)
 
-    def start_hatching(self, locust_count=None, hatch_rate=None, wait=False):
+    def start_hatching(self, locust_count=None, hatch_rate=None, wait=False, locust_task_name=None):
+        self.locust_task_name = locust_task_name
         if self.state != STATE_RUNNING and self.state != STATE_HATCHING:
             self.stats.clear_all()
             self.stats.start_time = time()
@@ -160,16 +162,16 @@ class LocustRunner(object):
                 if hatch_rate:
                     self.hatch_rate = hatch_rate
                 spawn_count = locust_count - self.num_clients
-                self.spawn_locusts(spawn_count=spawn_count)
+                self.spawn_locusts(spawn_count=spawn_count, locust_task_name=self.locust_task_name)
             else:
                 events.hatch_complete.fire(user_count=self.num_clients)
         else:
             if hatch_rate:
                 self.hatch_rate = hatch_rate
             if locust_count is not None:
-                self.spawn_locusts(locust_count, wait=wait)
+                self.spawn_locusts(locust_count, wait=wait, locust_task_name=self.locust_task_name)
             else:
-                self.spawn_locusts(wait=wait)
+                self.spawn_locusts(wait=wait, locust_task_name=self.locust_task_name)
 
     def stop(self):
         # if we are currently hatching locusts we need to kill the hatching greenlet first
@@ -195,8 +197,9 @@ class LocalLocustRunner(LocustRunner):
             self.log_exception("local", str(exception), formatted_tb)
         events.locust_error += on_locust_error
 
-    def start_hatching(self, locust_count=None, hatch_rate=None, wait=False):
-        self.hatching_greenlet = gevent.spawn(lambda: super(LocalLocustRunner, self).start_hatching(locust_count, hatch_rate, wait=wait))
+    def start_hatching(self, locust_count=None, hatch_rate=None, wait=False, locust_task_name=None):
+        self.locust_task_name = locust_task_name
+        self.hatching_greenlet = gevent.spawn(lambda: super(LocalLocustRunner, self).start_hatching(locust_count, hatch_rate, wait=wait, locust_task_name=locust_task_name))
         self.greenlet = self.hatching_greenlet
 
 class DistributedLocustRunner(LocustRunner):
@@ -264,7 +267,8 @@ class MasterLocustRunner(DistributedLocustRunner):
     def user_count(self):
         return sum([c.user_count for c in self.clients.itervalues()])
     
-    def start_hatching(self, locust_count, hatch_rate):
+    def start_hatching(self, locust_count, hatch_rate, locust_task_name=None):
+        self.locust_task_name = locust_task_name
         num_slaves = len(self.clients.ready) + len(self.clients.running)
         if not num_slaves:
             logger.warning("You are running in distributed mode but have no slave servers connected. "
@@ -391,7 +395,7 @@ class SlaveLocustRunner(DistributedLocustRunner):
                 #self.num_clients = job["num_clients"]
                 self.num_requests = job["num_requests"]
                 self.host = job["host"]
-                self.hatching_greenlet = gevent.spawn(lambda: self.start_hatching(locust_count=job["num_clients"], hatch_rate=job["hatch_rate"]))
+                self.hatching_greenlet = gevent.spawn(lambda: self.start_hatching(locust_count=job["num_clients"], hatch_rate=job["hatch_rate"], locust_task_name=self.locust_task_name))
             elif msg.type == "stop":
                 self.stop()
                 self.client.send(Message("client_stopped", None, self.client_id))

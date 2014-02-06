@@ -34,7 +34,7 @@ def task(weight=1):
     """
     
     def decorator_func(func):
-        func.locust_task_weight = weight
+        func.locust_task_name_weight = weight
         return func
     
     """
@@ -94,12 +94,14 @@ class Locust(object):
     client = NoClientWarningRaiser()
     _catch_exceptions = False
     
-    def __init__(self):
+    def __init__(self, *args, **kwargs):
+        self.locust_task_name = kwargs.get('locust_task_name', None)
         super(Locust, self).__init__()
     
-    def run(self):
+    def run(self, *args, **kwargs):
+        self.locust_task_name = kwargs.get('locust_task_name', None)
         try:
-            self.task_set(self).run()
+            self.task_set(self).run(locust_task_name=self.locust_task_name)
         except StopLocust:
             pass
         except (RescheduleTask, RescheduleTaskImmediately) as e:
@@ -123,8 +125,8 @@ class HttpLocust(Locust):
     The client support cookies, and therefore keeps the session between HTTP requests.
     """
     
-    def __init__(self):
-        super(HttpLocust, self).__init__()
+    def __init__(self, *args, **kwargs):
+        super(HttpLocust, self).__init__(*args, **kwargs)
         if self.host is None:
             raise LocustError("You must specify the base host. Either in the host attribute in the Locust class, or on the command line using the --host option.")
         
@@ -137,7 +139,7 @@ class TaskSetMeta(type):
     ratio using an {task:int} dict, or a [(task0,int), ..., (taskN,int)] list.
     """
     
-    def __new__(mcs, classname, bases, classDict):
+    def __new__(mcs, classname, bases, classDict, locust_task_name=None):
         new_tasks = []
         for base in bases:
             if hasattr(base, "tasks") and base.tasks:
@@ -157,8 +159,8 @@ class TaskSetMeta(type):
                     new_tasks.append(task)
         
         for item in classDict.itervalues():
-            if hasattr(item, "locust_task_weight"):
-                for i in xrange(0, item.locust_task_weight):
+            if hasattr(item, "locust_task_name_weight"):
+                for i in xrange(0, item.locust_task_name_weight):
                     new_tasks.append(item)
         
         classDict["tasks"] = new_tasks
@@ -223,9 +225,10 @@ class TaskSet(object):
 
     __metaclass__ = TaskSetMeta    
     
-    def __init__(self, parent):
+    def __init__(self, parent, *args, **kwargs):
         self._task_queue = []
         self._time_start = time()
+        self.locust_task_name = kwargs.get('locust_task_name', None)
         
         if isinstance(parent, TaskSet):
             self.locust = parent.locust
@@ -245,6 +248,7 @@ class TaskSet(object):
     def run(self, *args, **kwargs):
         self.args = args
         self.kwargs = kwargs
+        self.locust_task_name = kwargs.get('locust_task_name', None)
         
         try:
             if hasattr(self, "on_start"):
@@ -299,7 +303,7 @@ class TaskSet(object):
             task(*args, **kwargs)
         elif hasattr(task, "tasks") and issubclass(task, TaskSet):
             # task is another (nested) TaskSet class
-            task(self).run(*args, **kwargs)
+            task(self).run(locust_task_name=self.locust_task_name, *args, **kwargs)
         else:
             # task is a function
             task(self, *args, **kwargs)
@@ -322,6 +326,8 @@ class TaskSet(object):
             self._task_queue.append(task)
     
     def get_next_task(self):
+        if self.locust_task_name:
+            self.tasks = filter(lambda x: x.func_name==self.locust_task_name, self.tasks)
         return random.choice(self.tasks)
     
     def wait(self):

@@ -35,6 +35,7 @@ def index():
         slave_count = 0
     
     return render_template("index.html",
+        tasks = runners.locust_runner.locust_classes[0].task_set.tasks,
         state=runners.locust_runner.state,
         is_distributed=is_distributed,
         slave_count=slave_count,
@@ -45,10 +46,10 @@ def index():
 @app.route('/swarm', methods=["POST"])
 def swarm():
     assert request.method == "POST"
-
+    locust_task_name = request.form["locust_task_name"]
     locust_count = int(request.form["locust_count"])
     hatch_rate = float(request.form["hatch_rate"])
-    runners.locust_runner.start_hatching(locust_count, hatch_rate)
+    runners.locust_runner.start_hatching(locust_count, hatch_rate, locust_task_name=locust_task_name)
     response = make_response(json.dumps({'success':True, 'message': 'Swarming started'}))
     response.headers["Content-type"] = "application/json"
     return response
